@@ -1,0 +1,73 @@
+name: Build NetHunter Kernel
+
+on:
+  workflow_dispatch: # Allows you to trigger the build manually with a single click
+
+jobs:
+  kernel-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximize Runner Build Space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 4096
+          swap-size-mb: 2048
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+
+      - name: Install Linux Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop rsync schedtool squashfs-tools textinfo xz-utils zip zlib1g-dev
+
+      - name: Clone Toolchain (Zyc-Clang)
+        run: |
+          git clone --depth=1 https://github.com/EmanuelCN/zyc_clang-14.git clang
+
+      - name: Clone Samsung MT6768 Kernel Source
+        run: |
+          # Clones a custom community unified MediaTek source tree with pre-integrated NetHunter patches
+          git clone --depth=1 https://github.com/karamdev1/nethunter_kernel_samsung_a32.git -b master kernel-source
+
+      - name: Execute Kernel Compilation
+        run: |
+          cd kernel-source
+          
+          # Inject toolchain pathing
+          export PATH="${{ github.workspace }}/clang/bin:$PATH"
+          
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          export CC=clang
+          
+          # Target unified defconfig configuration step
+          # Note: If compilation errors out, confirm your tree's matching file name inside arch/arm64/configs/
+          make O=out a32_defconfig
+          
+          # Compile the image targets
+          make -j$(nproc --all) O=out
+
+      - name: Package with AnyKernel3
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+          
+          # Check and pull compiled output
+          if [ -f kernel-source/out/arch/arm64/boot/Image.gz-dtb ]; then
+            cp kernel-source/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          elif [ -f kernel-source/out/arch/arm64/boot/Image.gz ]; then
+            cp kernel-source/out/arch/arm64/boot/Image.gz AnyKernel3/
+          else
+            cp kernel-source/out/arch/arm64/boot/Image AnyKernel3/
+          fi
+          
+          cd AnyKernel3
+          zip -r9 ../NetHunter-Kernel-Flashable.zip * -x .git* README.md
+
+      - name: Upload Flashable Kernel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetHunter-Kernel-Zip
+          path: NetHunter-Kernel-Flashable.zip
