@@ -46,7 +46,17 @@ jobs:
                     # Remove missing KernelSU dependency from Kconfig configuration
                 # Remove missing KernelSU dependency from Kconfig configuration
           sed -i '/kernelsu/d' drivers/Kconfig
+                    # Remove missing KernelSU dependency from Kconfig configuration
+          sed -i '/kernelsu/d' drivers/Kconfig
           
+          # Remove Samsung RKP Knox functions causing implicit declaration panics
+          sed -i '/rkp_robuffer_init/d' init/main.c
+          sed -i '/rkp_init/d' init/main.c
+          sed -i '/rkp_deferred_init/d' init/main.c
+          
+          # Redirect missing read_pnet_rcu helper to classic read_pnet macro
+          sed -i 's/read_pnet_rcu/read_pnet/g' include/linux/netdevice.h
+
           # Remove Samsung RKP Knox functions causing implicit declaration panics
           sed -i '/rkp_robuffer_init/d' init/main.c
           sed -i '/rkp_init/d' init/main.c
