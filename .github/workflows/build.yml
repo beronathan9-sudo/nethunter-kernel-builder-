@@ -28,7 +28,8 @@ jobs:
       - name: Clone Samsung MT6768 Kernel Source
         run: |
           # Clones a custom community unified MediaTek source tree with pre-integrated NetHunter patches
-          git clone --depth=1 https://github.com/karamdev1/nethunter_kernel_samsung_a32.git -b master kernel-source
+          git clone --depth=1 https://github.com/karamdev1/nethunter_kernel_samsung_a32.git kernel-source
+
 
       - name: Execute Kernel Compilation
         run: |
