@@ -43,7 +43,9 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
           export CC=clang
-          
+                    # Remove missing KernelSU dependency from Kconfig configuration
+          sed -i '/kernelsu/d' drivers/Kconfig
+
           # Target unified defconfig configuration step
           # Note: If compilation errors out, confirm your tree's matching file name inside arch/arm64/configs/
           make O=out a32_defconfig
