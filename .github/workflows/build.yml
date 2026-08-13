@@ -35,7 +35,12 @@ jobs:
           cd kernel_source
           rm -rf drivers/kernelsu
           mkdir -p drivers/kernelsu
-          echo 'mainmenu "KernelSU"' > drivers/kernelsu/Kconfig
+          cat << 'EOF' > drivers/kernelsu/Kconfig
+config KERNELSU
+	bool "KernelSU support"
+	default n
+EOF
+          echo "obj-\$(CONFIG_KERNELSU) += kernelsu/" > drivers/kernelsu/Makefile
 
       - name: Inject NetHunter Defconfig Options
         run: |
