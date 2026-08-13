@@ -30,28 +30,34 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/karamdev1/nethunter_kernel_samsung_mt6768.git kernel_source
 
-      - name: Patch Missing KernelSU Directory
+      - name: Fix Missing KernelSU Directory
         run: |
           cd kernel_source
           rm -rf drivers/kernelsu
-          mkdir -p drivers/kernelsu
-          echo 'config KERNELSU' > drivers/kernelsu/Kconfig
-          echo '	bool "KernelSU support"' >> drivers/kernelsu/Kconfig
-          echo '	default n' >> drivers/kernelsu/Kconfig
-          echo 'obj-y += kernelsu/' > drivers/kernelsu/Makefile
+          git clone --depth=1 https://github.com/trsMania/KernelSU drivers/kernelsu || {
+            mkdir -p drivers/kernelsu
+            echo 'config KERNELSU' > drivers/kernelsu/Kconfig
+            echo '	tristate "KernelSU support"' >> drivers/kernelsu/Kconfig
+            echo '	default n' >> drivers/kernelsu/Kconfig
+            echo 'obj-y += kernelsu/' > drivers/kernelsu/Makefile
+          }
 
-      - name: Inject NetHunter Defconfig Options
+      - name: Find and Prepare Defconfig
         run: |
           cd kernel_source
-          DEFCONFIG="arch/arm64/configs/a22_defconfig"
           
-          if [ -f "$DEFCONFIG" ]; then
-            echo "# Kali NetHunter Additions" >> $DEFCONFIG
-            echo "CONFIG_USB_CONFIGFS_F_HID=y" >> $DEFCONFIG
-            echo "CONFIG_USB_G_HID=y" >> $DEFCONFIG
-            echo "CONFIG_CFG80211=y" >> $DEFCONFIG
-            echo "CONFIG_MAC80211=y" >> $DEFCONFIG
-            echo "CONFIG_MAC80211_RC_DEFAULT=\"minstrel_ht\"" >> $DEFCONFIG
+          # Detect available defconfig automatically
+          CONFIG_FILE=$(find arch/arm64/configs/ -type f \( -name "*a22*" -o -name "*mt6768*" -o -name "*defconfig*" \) | head -n 1)
+          CONFIG_NAME=$(basename "$CONFIG_FILE")
+          
+          echo "FOUND_DEFCONFIG=$CONFIG_NAME" >> $GITHUB_ENV
+          
+          if [ -n "$CONFIG_FILE" ]; then
+            echo "# Kali NetHunter Additions" >> "$CONFIG_FILE"
+            echo "CONFIG_USB_CONFIGFS_F_HID=y" >> "$CONFIG_FILE"
+            echo "CONFIG_USB_G_HID=y" >> "$CONFIG_FILE"
+            echo "CONFIG_CFG80211=y" >> "$CONFIG_FILE"
+            echo "CONFIG_MAC80211=y" >> "$CONFIG_FILE"
           fi
 
       - name: Compile Kernel
@@ -61,8 +67,8 @@ jobs:
           export SUBARCH=arm64
           export PATH=$(pwd)/../toolchain/clang/bin:$PATH
 
-          # Build defconfig
-          make ARCH=arm64 O=out a22_defconfig
+          # Load detected defconfig
+          make ARCH=arm64 O=out $FOUND_DEFCONFIG
 
           # Compile Kernel Image
           make -j$(nproc --all) ARCH=arm64 O=out \
@@ -79,13 +85,9 @@ jobs:
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           cd AnyKernel3
-          if [ -f ../kernel_source/out/arch/arm64/boot/Image.gz-dtb ]; then
-            cp ../kernel_source/out/arch/arm64/boot/Image.gz-dtb ./Image.gz-dtb
-          elif [ -f ../kernel_source/out/arch/arm64/boot/Image.gz ]; then
-            cp ../kernel_source/out/arch/arm64/boot/Image.gz ./Image.gz
-          elif [ -f ../kernel_source/out/arch/arm64/boot/Image ]; then
-            cp ../kernel_source/out/arch/arm64/boot/Image ./Image
-          fi
+          
+          # Copy whatever output image format was generated
+          find ../kernel_source/out/arch/arm64/boot/ -name "Image*" -exec cp {} ./ \;
           
           zip -r9 ../NetHunter-Kernel-A225F.zip * -x .git README.md
 
