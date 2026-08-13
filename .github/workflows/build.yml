@@ -30,6 +30,14 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/karamdev1/nethunter_kernel_samsung_mt6768.git kernel_source
 
+      - name: Patch Missing KernelSU Directory
+        run: |
+          cd kernel_source
+          mkdir -p drivers/kernelsu
+          if [ ! -f "drivers/kernelsu/Kconfig" ]; then
+            echo '# Dummy Kconfig for KernelSU' > drivers/kernelsu/Kconfig
+          fi
+
       - name: Inject NetHunter Defconfig Options
         run: |
           cd kernel_source
