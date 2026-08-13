@@ -1,96 +1,86 @@
-name: Build NetHunter Kernel
+name: Build NetHunter Kernel - SM-A225F
 
 on:
-  workflow_dispatch: # Allows you to trigger the build manually with a single click
+  workflow_dispatch:
 
 jobs:
-  kernel-build:
+  build:
     runs-on: ubuntu-latest
-    steps:
-      - name: Maximize Runner Build Space
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 4096
-          swap-size-mb: 2048
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
 
-      - name: Install Linux Build Dependencies
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop rsync schedtool squashfs-tools zlib1g-dev  xz-utils zip zlib1g-dev
+          sudo apt-get install -y \
+            build-essential bc bison flex libssl-dev libelf-dev \
+            git zip unzip cpio lz4 xz-utils python3 python-is-python3 \
+            libncurses5-dev libncursesw5-dev device-tree-compiler \
+            crossbuild-essential-arm64 crossbuild-essential-armhf
 
-      - name: Clone Toolchain (Zyc-Clang)
+      - name: Setup Toolchain (Proton Clang)
         run: |
-          git clone --depth=1 https://github.com/EmanuelCN/zyc_clang-14.git clang
+          mkdir -p toolchain
+          cd toolchain
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
 
-      - name: Clone Samsung MT6768 Kernel Source
+      - name: Fetch Samsung Kernel Source
         run: |
-          # Clones a custom community unified MediaTek source tree with pre-integrated NetHunter patches
-          git clone --depth=1 https://github.com/karamdev1/nethunter_kernel_samsung_a32.git kernel-source
+          git clone --depth=1 https://github.com/karamdev1/nethunter_kernel_samsung_mt6768.git kernel_source
 
-
-      - name: Execute Kernel Compilation
+      - name: Inject NetHunter Defconfig Options
         run: |
-          cd kernel-source
+          cd kernel_source
+          DEFCONFIG="arch/arm64/configs/a22_defconfig"
           
-          # Inject toolchain pathing
-          export PATH="${{ github.workspace }}/clang/bin:$PATH"
-          
+          if [ -f "$DEFCONFIG" ]; then
+            echo "# Kali NetHunter Additions" >> $DEFCONFIG
+            echo "CONFIG_USB_CONFIGFS_F_HID=y" >> $DEFCONFIG
+            echo "CONFIG_USB_G_HID=y" >> $DEFCONFIG
+            echo "CONFIG_CFG80211=y" >> $DEFCONFIG
+            echo "CONFIG_MAC80211=y" >> $DEFCONFIG
+            echo "CONFIG_MAC80211_RC_DEFAULT=\"minstrel_ht\"" >> $DEFCONFIG
+          fi
+
+      - name: Compile Kernel
+        run: |
+          cd kernel_source
           export ARCH=arm64
           export SUBARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-          export CC=clang
-                    # Remove missing KernelSU dependency from Kconfig configuration
-                # Remove missing KernelSU dependency from Kconfig configuration
-          sed -i '/kernelsu/d' drivers/Kconfig
-                    # Remove missing KernelSU dependency from Kconfig configuration
-          sed -i '/kernelsu/d' drivers/Kconfig
-          
-          # Remove Samsung RKP Knox functions causing implicit declaration panics
-          sed -i '/rkp_robuffer_init/d' init/main.c
-          sed -i '/rkp_init/d' init/main.c
-          sed -i '/rkp_deferred_init/d' init/main.c
-          
-          # Redirect missing read_pnet_rcu helper to classic read_pnet macro
-          sed -i 's/read_pnet_rcu/read_pnet/g' include/linux/netdevice.h
+          export PATH=$(pwd)/../toolchain/clang/bin:$PATH
 
-          # Remove Samsung RKP Knox functions causing implicit declaration panics
-          sed -i '/rkp_robuffer_init/d' init/main.c
-          sed -i '/rkp_init/d' init/main.c
-          sed -i '/rkp_deferred_init/d' init/main.c
-          
-          # Redirect missing read_pnet_rcu helper to classic read_pnet macro
-          sed -i 's/read_pnet_rcu/read_pnet/g' include/linux/netdevice.h
+          # Build defconfig
+          make ARCH=arm64 O=out a22_defconfig
 
-
-          # Target unified defconfig configuration step
-          # Note: If compilation errors out, confirm your tree's matching file name inside arch/arm64/configs/
-          make O=out a32_defconfig
-          
-          # Compile the image targets
-          make -j$(nproc --all) O=out
+          # Compile Kernel Image
+          make -j$(nproc --all) ARCH=arm64 O=out \
+            CC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip
 
       - name: Package with AnyKernel3
         run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-          
-          # Check and pull compiled output
-          if [ -f kernel-source/out/arch/arm64/boot/Image.gz-dtb ]; then
-            cp kernel-source/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
-          elif [ -f kernel-source/out/arch/arm64/boot/Image.gz ]; then
-            cp kernel-source/out/arch/arm64/boot/Image.gz AnyKernel3/
-          else
-            cp kernel-source/out/arch/arm64/boot/Image AnyKernel3/
+          git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+          cd AnyKernel3
+          if [ -f ../kernel_source/out/arch/arm64/boot/Image.gz-dtb ]; then
+            cp ../kernel_source/out/arch/arm64/boot/Image.gz-dtb ./Image.gz-dtb
+          elif [ -f ../kernel_source/out/arch/arm64/boot/Image.gz ]; then
+            cp ../kernel_source/out/arch/arm64/boot/Image.gz ./Image.gz
+          elif [ -f ../kernel_source/out/arch/arm64/boot/Image ]; then
+            cp ../kernel_source/out/arch/arm64/boot/Image ./Image
           fi
           
-          cd AnyKernel3
-          zip -r9 ../NetHunter-Kernel-Flashable.zip * -x .git* README.md
+          zip -r9 ../NetHunter-Kernel-A225F.zip * -x .git README.md
 
-      - name: Upload Flashable Kernel Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NetHunter-Kernel-Zip
-          path: NetHunter-Kernel-Flashable.zip
+          name: NetHunter-Kernel-A225F
+          path: NetHunter-Kernel-A225F.zip
