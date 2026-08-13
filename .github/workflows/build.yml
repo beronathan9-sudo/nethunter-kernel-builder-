@@ -33,7 +33,7 @@ jobs:
       - name: Patch Missing KernelSU Directory
         run: |
           cd kernel_source
-          mkdir -p drivers/kernelsu
+          mkdir -p drivers/kernelsu || true
           if [ ! -f "drivers/kernelsu/Kconfig" ]; then
             echo '# Dummy Kconfig for KernelSU' > drivers/kernelsu/Kconfig
           fi
