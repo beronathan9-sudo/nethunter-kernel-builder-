@@ -46,7 +46,6 @@ jobs:
         run: |
           cd kernel_source
           
-          # Detect available defconfig automatically
           CONFIG_FILE=$(find arch/arm64/configs/ -type f \( -name "*a22*" -o -name "*mt6768*" -o -name "*defconfig*" \) | head -n 1)
           CONFIG_NAME=$(basename "$CONFIG_FILE")
           
@@ -70,7 +69,7 @@ jobs:
           # Load detected defconfig
           make ARCH=arm64 O=out $FOUND_DEFCONFIG
 
-          # Compile Kernel Image
+          # Compile Kernel Image with WERROR disabled to prevent warning breaks
           make -j$(nproc --all) ARCH=arm64 O=out \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
@@ -79,14 +78,15 @@ jobs:
             NM=llvm-nm \
             OBJCOPY=llvm-objcopy \
             OBJDUMP=llvm-objdump \
-            STRIP=llvm-strip
+            STRIP=llvm-strip \
+            KCFLAGS="-Wno-error -Wno-macro-redefined" \
+            CONFIG_NO_ERROR_ON_MISMATCH=y
 
       - name: Package with AnyKernel3
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           cd AnyKernel3
           
-          # Copy whatever output image format was generated
           find ../kernel_source/out/arch/arm64/boot/ -name "Image*" -exec cp {} ./ \;
           
           zip -r9 ../NetHunter-Kernel-A225F.zip * -x .git README.md
