@@ -18,7 +18,14 @@ jobs:
             build-essential bc bison flex libssl-dev libelf-dev \
             git zip unzip cpio lz4 xz-utils python3 python-is-python3 \
             libncurses5-dev libncursesw5-dev device-tree-compiler \
-            crossbuild-essential-arm64 crossbuild-essential-armhf
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabi g++-arm-linux-gnueabi binutils-arm-linux-gnueabi
+
+      - name: Setup Toolchain (Proton Clang)
+        run: |
+          mkdir -p toolchain
+          cd toolchain
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
 
       - name: Fetch Samsung Kernel Source
         run: |
@@ -56,12 +63,14 @@ jobs:
           cd kernel_source
           export ARCH=arm64
           export SUBARCH=arm64
+          export PATH=$(pwd)/../toolchain/clang/bin:$PATH
 
           # Load defconfig
           make ARCH=arm64 O=out $FOUND_DEFCONFIG
 
-          # Compile Kernel using GCC to prevent MediaTek driver Clang failures
+          # Compile Kernel Image with Clang & GCC Cross Toolchain
           make -j$(nproc --all) ARCH=arm64 O=out \
+            CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             KCFLAGS="-w" \
