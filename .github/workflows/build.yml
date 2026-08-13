@@ -68,11 +68,16 @@ jobs:
           # Load defconfig
           make ARCH=arm64 O=out $FOUND_DEFCONFIG
 
-          # Compile Kernel Image with Clang & GCC Cross Toolchain
-          make -j$(nproc --all) ARCH=arm64 O=out \
+          # Compile single-threaded to isolate exact error line on break
+          make -j1 ARCH=arm64 O=out \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip \
             KCFLAGS="-w" \
             KCPPFLAGS="-w"
 
