@@ -20,12 +20,6 @@ jobs:
             libncurses5-dev libncursesw5-dev device-tree-compiler \
             crossbuild-essential-arm64 crossbuild-essential-armhf
 
-      - name: Setup Toolchain (Proton Clang)
-        run: |
-          mkdir -p toolchain
-          cd toolchain
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
-
       - name: Fetch Samsung Kernel Source
         run: |
           git clone --depth=1 https://github.com/karamdev1/nethunter_kernel_samsung_mt6768.git kernel_source
@@ -34,13 +28,11 @@ jobs:
         run: |
           cd kernel_source
           rm -rf drivers/kernelsu
-          git clone --depth=1 https://github.com/trsMania/KernelSU drivers/kernelsu || {
-            mkdir -p drivers/kernelsu
-            echo 'config KERNELSU' > drivers/kernelsu/Kconfig
-            echo '	tristate "KernelSU support"' >> drivers/kernelsu/Kconfig
-            echo '	default n' >> drivers/kernelsu/Kconfig
-            echo 'obj-y += kernelsu/' > drivers/kernelsu/Makefile
-          }
+          mkdir -p drivers/kernelsu
+          echo 'config KERNELSU' > drivers/kernelsu/Kconfig
+          echo '	tristate "KernelSU support"' >> drivers/kernelsu/Kconfig
+          echo '	default n' >> drivers/kernelsu/Kconfig
+          echo 'obj-y += kernelsu/' > drivers/kernelsu/Makefile
 
       - name: Find and Prepare Defconfig
         run: |
@@ -64,23 +56,16 @@ jobs:
           cd kernel_source
           export ARCH=arm64
           export SUBARCH=arm64
-          export PATH=$(pwd)/../toolchain/clang/bin:$PATH
 
-          # Load detected defconfig
+          # Load defconfig
           make ARCH=arm64 O=out $FOUND_DEFCONFIG
 
-          # Compile Kernel Image with WERROR disabled to prevent warning breaks
+          # Compile Kernel using GCC to prevent MediaTek driver Clang failures
           make -j$(nproc --all) ARCH=arm64 O=out \
-            CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            AR=llvm-ar \
-            NM=llvm-nm \
-            OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump \
-            STRIP=llvm-strip \
-            KCFLAGS="-Wno-error -Wno-macro-redefined" \
-            CONFIG_NO_ERROR_ON_MISMATCH=y
+            KCFLAGS="-w" \
+            KCPPFLAGS="-w"
 
       - name: Package with AnyKernel3
         run: |
